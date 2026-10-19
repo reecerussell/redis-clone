@@ -6,6 +6,7 @@ default:
 	@echo "> test-hash-table"
 	@echo "> test-resp"
 	@echo "> test"
+	@echo "> test-listener"
 
 test: test-hash-table test-resp
 
@@ -17,10 +18,14 @@ test-hash-table:
 	rm ./test_hash_table ./test_hash_table_asan
 
 test-resp:
-	gcc $(CFLAGS) -o test_resp test/test_resp.c src/resp.c
+	gcc $(CFLAGS) -o test_resp test/test_resp.c src/resp.c src/buffer.c
 	./test_resp
-	gcc $(CFLAGS) $(SAN) -o test_resp_asan test/test_resp.c src/resp.c
+	gcc $(CFLAGS) $(SAN) -o test_resp_asan test/test_resp.c src/resp.c src/buffer.c
 	./test_resp_asan
 	rm ./test_resp ./test_resp_asan
 
-.PHONY: default test test-hash-table test-resp
+test-listener:
+	gcc $(CFLAGS) -o test_listener test/test_manual_listener.c src/socket.c src/logger.c src/buffer.c src/resp.c
+
+
+.PHONY: default test test-hash-table test-resp test-listener

@@ -1,18 +1,30 @@
 #ifndef RESP_H
 #define RESP_H
 
+#include <stdlib.h>
+#include "buffer.h"
+
+typedef enum
+{
+    ARRAY,
+    SIMPLE_STRING,
+    BULK_STRING,
+    INTEGER
+} RespNodeType;
+
 typedef struct
 {
-    char **argv; // argc NUL-terminated strings
-    int argc;
-} RespArgs;
+    RespNodeType type;
+    size_t length;
+    void *value;
+} RespNode_t;
 
-// Parses one complete RESP command: an array of bulk strings, e.g.
-// "*2\r\n$3\r\nGET\r\n$3\r\nfoo\r\n". Returns NULL if the input is malformed
-// or incomplete. The result is owned by the caller: release with
-// resp_args_free.
-RespArgs *parse_command(const char *value);
+int resp_parse(RespNode_t **target, buffer_t *buf);
 
-void resp_args_free(RespArgs *args);
+void resp_node_free(RespNode_t *node);
+
+int try_resp_parse(RespNode_t **target, buffer_t *buf);
+
+const char *resp_node_type_name(RespNodeType type);
 
 #endif
