@@ -39,6 +39,8 @@ void resp_node_free(RespNode_t *node)
     free(node);
 }
 
+// Line represents a line substring in a larger string, but as
+// a "view" into it rather than a copy of the data.
 typedef struct
 {
     const char *data;
@@ -70,6 +72,11 @@ static int parse_int(const char *data, size_t length, long long *out)
     return 0;
 }
 
+static bool is_delimeter(const char *data, size_t index, size_t length)
+{
+    return data[index] == '\r' && index + 1 < length && data[index + 1] == '\n';
+}
+
 RespParseResult split_lines(const char *data, size_t length, line_t ***out, size_t *count)
 {
     // Estimate the line count from how many delimeters are found.
@@ -78,7 +85,7 @@ RespParseResult split_lines(const char *data, size_t length, line_t ***out, size
     size_t line_count = 0;
     for (size_t i = 0; i < length; i++)
     {
-        if (data[i] == '\r' && i + 1 < length && data[i + 1] == '\n')
+        if (is_delimeter(data, i, length))
         {
             line_count++;
             i++;
@@ -114,7 +121,7 @@ RespParseResult split_lines(const char *data, size_t length, line_t ***out, size
             continue;
         }
 
-        if (data[i] != '\r' || i + 1 >= length || data[i + 1] != '\n')
+        if (is_delimeter(data, i, length))
         {
             continue;
         }
