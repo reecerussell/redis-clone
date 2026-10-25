@@ -121,7 +121,7 @@ RespParseResult split_lines(const char *data, size_t length, line_t ***out, size
             continue;
         }
 
-        if (is_delimeter(data, i, length))
+        if (!is_delimeter(data, i, length))
         {
             continue;
         }
@@ -189,7 +189,70 @@ RespParseResult split_lines(const char *data, size_t length, line_t ***out, size
     return OK;
 }
 
-RespParseResult parse_lines(RespNode_t **out, line_t **lines, size_t len, size_t *lines_read)
+// We need this declaration of parse_lines here because there is a circular
+// dependency between parse_array and parse_lines, as they can recursively
+// call each other.
+static RespParseResult parse_lines(RespNode_t **out, line_t **lines, size_t len, size_t *lines_read);
+
+static RespParseResult parse_array(RespNode_t *node, line_t **lines, size_t len, size_t *lines_read)
+{
+    long long array_length;
+    if (parse_int(lines[0]->data + 1, lines[0]->len - 1, &array_length) != 0)
+    {
+        return ERROR;
+    }
+
+    node->type = ARRAY;
+    node->length = array_length;
+
+    if (array_length < -1)
+    {
+        printf("parse_array: array length less than -1\n");
+        return ERROR;
+    }
+
+    // -1 indicates NULL array, so return early here
+    if (array_length == -1)
+    {
+        node->value = NULL;
+        return OK;
+    }
+
+    if (array_length > (long long)len - 1)
+    {
+        printf("parse_array: array length longer than available lines\n");
+        return ERROR;
+    }
+
+    RespNode_t **nodes = calloc(array_length, sizeof(RespNode_t *));
+    if (!nodes)
+    {
+        return ERROR;
+    }
+    node->value = nodes;
+
+    size_t sub_lines_read = 0;
+    for (long long i = 0; i < array_length; i++)
+    {
+        RespNode_t *sub_node;
+        size_t offset = 1 + sub_lines_read;
+        size_t lr = 0;
+        RespParseResult res = parse_lines(&sub_node, lines + offset, len - offset, &lr);
+        sub_lines_read += lr;
+        if (res != OK)
+        {
+            return res;
+        }
+
+        nodes[i] = sub_node;
+    }
+
+    *lines_read = 1 + sub_lines_read;
+
+    return OK;
+}
+
+static RespParseResult parse_lines(RespNode_t **out, line_t **lines, size_t len, size_t *lines_read)
 {
     if (!lines || len < 1 || lines[0]->len < 1)
     {
@@ -243,64 +306,12 @@ RespParseResult parse_lines(RespNode_t **out, line_t **lines, size_t len, size_t
     }
     case ARRAY_KEY:
     {
-        long long array_length;
-        if (parse_int(lines[0]->data + 1, lines[0]->len - 1, &array_length) != 0)
+        RespParseResult res = parse_array(node, lines, len, lines_read);
+        if (res != OK)
         {
             resp_node_free(node);
-            return ERROR;
+            return res;
         }
-
-        node->type = ARRAY;
-        node->length = array_length;
-
-        if (array_length < -1)
-        {
-            resp_node_free(node);
-            printf("parse_lines: array length less than -1\n");
-            return ERROR;
-        }
-
-        // -1 indicates NULL array, so break early here
-        if (array_length == -1)
-        {
-            node->value = NULL;
-            break;
-        }
-
-        if (array_length > (long long)len - 1)
-        {
-            resp_node_free(node);
-            printf("parse_lines: array length longer than available lines\n");
-            return ERROR;
-        }
-
-        RespNode_t **nodes = calloc(array_length, sizeof(RespNode_t *));
-        if (!nodes)
-        {
-            resp_node_free(node);
-            return ERROR;
-        }
-        node->value = nodes;
-
-        size_t sub_lines_read = 0;
-        for (long long i = 0; i < array_length; i++)
-        {
-            RespNode_t *sub_node;
-            size_t offset = 1 + sub_lines_read;
-            size_t lr = 0;
-            RespParseResult res = parse_lines(&sub_node, lines + offset, len - offset, &lr);
-            sub_lines_read += lr;
-            if (res != OK)
-            {
-                resp_node_free(node);
-                return res;
-            }
-
-            nodes[i] = sub_node;
-        }
-
-        *lines_read = 1 + sub_lines_read;
-
         break;
     }
     default:
