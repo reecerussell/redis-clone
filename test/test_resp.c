@@ -40,13 +40,13 @@ int assert_parsing_fails(const char *input)
     buffer_t *buf = buf_create(fd);
 
     RespNode_t *node = NULL;
-    int ec = resp_parse(&node, buf);
+    RespParseResult ec = resp_parse(&node, buf);
 
     close(fd);
     buf_free(buf);
     resp_node_free(node);
 
-    return ec;
+    return ec == OK ? 0 : -1;
 }
 
 int test_simple_bulk_string()
@@ -58,10 +58,11 @@ int test_simple_bulk_string()
     buffer_t *buf = buf_create(fd);
 
     RespNode_t *node;
-    int ec;
-    if ((ec = resp_parse(&node, buf)) != 0)
+    int ec = 0;
+    if (resp_parse(&node, buf) == ERROR)
     {
         printf("FAIL: test_simple_bulk_string -> failed to parse node\n");
+        ec = -1;
     }
 
     if (ec == 0 && !node)
@@ -78,7 +79,7 @@ int test_simple_bulk_string()
 
     if (ec == 0 && node->length != 5)
     {
-        printf("FAIL: test_simple_bulk_string -> expected length of 5 but got '%ld'\n", node->length);
+        printf("FAIL: test_simple_bulk_string -> expected length of 5 but got '%lld'\n", node->length);
         ec = -1;
     }
 
@@ -139,11 +140,11 @@ int test_edge_cases_simple_bulk_strings()
 
     if (ec == 0)
     {
-        printf("PASSED: test_negative_simple_bulk_strings\n");
+        printf("PASSED: test_edge_cases_simple_bulk_strings\n");
     }
     else
     {
-        printf("FAILED: test_negative_simple_bulk_strings\n");
+        printf("FAILED: test_edge_cases_simple_bulk_strings\n");
     }
 
     return ec;
@@ -158,10 +159,12 @@ int test_simple_string()
     buffer_t *buf = buf_create(fd);
 
     RespNode_t *node;
-    int ec;
-    if ((ec = resp_parse(&node, buf)) != 0)
+    RespParseResult res;
+    int ec = 0;
+    if ((res = resp_parse(&node, buf)) == ERROR)
     {
-        printf("FAIL: test_simple_string -> failed to parse node\n");
+        printf("FAIL: test_simple_string -> failed to parse node, status: %d\n", res);
+        ec = -1;
     }
 
     if (ec == 0 && !node)
@@ -178,7 +181,7 @@ int test_simple_string()
 
     if (ec == 0 && node->length != 11)
     {
-        printf("FAIL: test_simple_string -> expected length of 11 but got '%ld'\n", node->length);
+        printf("FAIL: test_simple_string -> expected length of 11 but got '%lld'\n", node->length);
         ec = -1;
     }
 
@@ -201,7 +204,7 @@ int test_simple_string()
     buf_free(buf);
     resp_node_free(node);
 
-    return ec;
+    return 0;
 }
 
 int test_long_simple_string()
@@ -249,19 +252,20 @@ int test_long_simple_string()
 
     if (ec == 0 && node->length != 1996)
     {
-        printf("FAIL: test_long_simple_string -> expected length of 1996 but got '%ld'\n", node->length);
+        printf("FAIL: test_long_simple_string -> expected length of 1996 but got '%lld'\n", node->length);
         ec = -1;
     }
 
     if (ec == 0)
     {
-        for (size_t i = 0; i < node->length; i++)
+        for (long long i = 0; i < node->length; i++)
         {
             char c = ((char *)node->value)[i];
             if (c != 'a')
             {
-                printf("FAIL: test_long_simple_string -> expected value at index '%ld' to be 'a' but got '%hhd'\n", i, c);
+                printf("FAIL: test_long_simple_string -> expected value at index '%lld' to be 'a' but got '%hhd'\n", i, c);
                 ec = -1;
+                break;
             }
         }
     }
@@ -329,10 +333,12 @@ int test_integer()
     buffer_t *buf = buf_create(fd);
 
     RespNode_t *node;
-    int ec;
-    if ((ec = resp_parse(&node, buf)) != 0)
+    RespParseResult res;
+    int ec = 0;
+    if ((res = resp_parse(&node, buf)) == ERROR)
     {
-        printf("FAIL: test_integer -> failed to parse node\n");
+        printf("FAIL: test_integer -> failed to parse node, got %d\n", res);
+        ec = -1;
     }
 
     if (ec == 0 && !node)
@@ -378,10 +384,11 @@ int test_bulk_string_array()
     buffer_t *buf = buf_create(fd);
 
     RespNode_t *node;
-    int ec;
-    if ((ec = resp_parse(&node, buf)) != 0)
+    int ec = 0;
+    if (resp_parse(&node, buf) == ERROR)
     {
         printf("FAIL: test_bulk_string_array -> failed to parse node\n");
+        ec = -1;
     }
 
     if (ec == 0 && !node)
@@ -398,7 +405,7 @@ int test_bulk_string_array()
 
     if (ec == 0 && node->length != 2)
     {
-        printf("FAIL: test_bulk_string_array -> expected length of 2 but got '%ld'\n", node->length);
+        printf("FAIL: test_bulk_string_array -> expected length of 2 but got '%lld'\n", node->length);
         ec = -1;
     }
 

@@ -13,6 +13,8 @@ ssize_t buf_position(buffer_t *buf);
 
 int buf_seek(buffer_t *buf, size_t position);
 
+char *buf_data(buffer_t *buf);
+
 void buf_free(buffer_t *buf);
 
 #endif

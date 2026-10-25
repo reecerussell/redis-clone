@@ -1,7 +1,5 @@
 #include <stdio.h>
 #include <string.h>
-#include <strings.h>
-#include <ctype.h>
 #include "../include/resp.h"
 #include "../include/buffer.h"
 
@@ -17,203 +15,6 @@
 #define BUFFER_BLOCK_SIZE 1024  // 1kb
 #define MAX_READ_SIZE 536870912 // 512mb
 
-static int map_resp_type_enum(char c, RespNodeType *type)
-{
-    switch (c)
-    {
-    case SIMPLE_STRING_KEY:
-        *type = SIMPLE_STRING;
-        break;
-    case BULK_STRING_KEY:
-        *type = BULK_STRING;
-        break;
-    case ARRAY_KEY:
-        *type = ARRAY;
-        break;
-    case INTEGER_KEY:
-        *type = INTEGER;
-        break;
-    default:
-        return -1;
-    }
-
-    return 0;
-}
-
-static int read_node_type(buffer_t *buf, RespNodeType *type)
-{
-    char data[2];
-    data[1] = '\0';
-
-    if (buf_read(buf, data, 1) < 1)
-    {
-        return -1;
-    }
-
-    return map_resp_type_enum(data[0], type);
-}
-
-static int read_integer(buffer_t *buf, ssize_t *out)
-{
-    char data[23]; // 22 for 19 digits of int64 + delimeter + terminator + optional '-'
-    bzero(data, 23);
-
-    size_t start_position = buf_position(buf);
-    if (buf_read(buf, data, 22) < 1)
-    {
-        return -1;
-    }
-
-    ssize_t n = 0;
-    size_t i = 0;
-    bool is_negative = false;
-    char p[2];
-    p[1] = '\0';
-
-    for (; i < 22; i++)
-    {
-        char c = data[i];
-        if (i == 0 && c == '-')
-        {
-            is_negative = true;
-            continue;
-        }
-
-        if (!isdigit(c))
-        {
-            break;
-        }
-
-        p[0] = c;
-
-        n *= 10;
-        n += atoi(p); // TODO: optimise using char values
-    }
-
-    if (is_negative)
-    {
-        n *= -1;
-    }
-
-    *out = n;
-
-    // Set buffer position to the next char after the read length + delimeter.
-    buf_seek(buf, start_position + i + 2);
-
-    return 0;
-}
-
-// Finds the index of the first DELIMITER in the input. Returns -1 if not found.
-// This isn't optimised for dynamic DELIMETER values.
-static int index_of_delimeter(const char *input, size_t len)
-{
-    if (!input || len < 2)
-    {
-        return -1;
-    }
-
-    for (size_t i = 0; i < len; i++)
-    {
-        if (input[i] == '\r' && i + 1 < len && input[i + 1] == '\n')
-        {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-// Finds the index of the last occuring DELIMETER in the input. Returns -1 if not found.
-// This isn't optimised for dynamic DELIMETER values.
-static int last_index_of_delimeter(const char *input, size_t len)
-{
-    if (!input || len < 2)
-    {
-        return -1;
-    }
-
-    for (ssize_t i = ((ssize_t)len) - 1; i > 0; i--)
-    {
-        if (input[i] == '\n' && i - 1 >= 0 && input[i - 1] == '\r')
-        {
-            return i - 1;
-        }
-    }
-
-    return -1;
-}
-
-static int read_string(buffer_t *buf, char **out, int len)
-{
-    ssize_t bytes_requested = len + 2;                         // len + delimeter
-    char *data = malloc(sizeof(char) * (bytes_requested + 1)); // + terminator
-    if (!data)
-    {
-        return -1;
-    }
-    bzero(data, bytes_requested + 1);
-
-    ssize_t bytes_read = buf_read(buf, data, bytes_requested);
-    if (bytes_read != bytes_requested || last_index_of_delimeter(data, bytes_requested) != len)
-    { // Data size mismatch
-        free(data);
-        return -1;
-    }
-    bzero(&data[len], 3); // Terminate at the end of the content
-    *out = data;
-    return 0;
-}
-
-static int read_simple_string(buffer_t *buf, char **out)
-{
-    size_t cap = BUFFER_BLOCK_SIZE;
-    char *data = malloc(sizeof(char) * cap);
-    if (!data)
-    {
-        return -1;
-    }
-    bzero(data, cap);
-
-    ssize_t total_bytes = 0;
-    ssize_t next_read_block_size = cap - 1;
-
-    do
-    {
-        ssize_t bytes_read = buf_read(buf, data + total_bytes, (size_t)next_read_block_size);
-        if (bytes_read <= 0)
-        {
-            break;
-        }
-
-        total_bytes += bytes_read;
-
-        int delim_idx = index_of_delimeter(data, cap);
-        if (delim_idx > -1)
-        {
-            bzero(data + delim_idx, cap - delim_idx);
-            *out = data;
-            return 0;
-        }
-
-        if (bytes_read == next_read_block_size)
-        {
-            next_read_block_size = (cap * 2) - cap;
-            cap *= 2;
-            char *grown = realloc(data, cap);
-            if (!grown)
-            {
-                free(data);
-                return -1;
-            }
-            data = grown;
-        }
-    } while (total_bytes < MAX_READ_SIZE);
-
-    free(data);
-
-    return -1;
-}
-
 void resp_node_free(RespNode_t *node)
 {
     if (!node)
@@ -223,144 +24,322 @@ void resp_node_free(RespNode_t *node)
 
     if (node->value)
     {
-        switch (node->type)
-        {
-        case SIMPLE_STRING:
-        case BULK_STRING:
-        case INTEGER:
-            free(node->value);
-            break;
-        case ARRAY:
+        if (node->type == ARRAY)
         {
             RespNode_t **nodes = (RespNode_t **)node->value;
-            for (size_t i = 0; i < node->length; i++)
+            for (long long i = 0; i < node->length; i++)
             {
                 resp_node_free(nodes[i]);
             }
-            free(node->value);
         }
-        }
+
+        free(node->value);
     }
 
     free(node);
 }
 
-int resp_parse(RespNode_t **target, buffer_t *buf)
+typedef struct
 {
-    RespNode_t *node = malloc(sizeof(RespNode_t));
+    const char *data;
+    size_t len;
+} line_t;
+
+void free_lines(line_t **lines, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+    {
+        if (lines[i])
+        {
+            free(lines[i]);
+        }
+    }
+    free(lines);
+}
+
+static int parse_int(const char *data, size_t length, long long *out)
+{
+    char *end;
+    long long result = strtoll(data, &end, 10);
+    if (data + length != end)
+    {
+        return -1;
+    }
+
+    *out = result;
+    return 0;
+}
+
+RespParseResult split_lines(const char *data, size_t length, line_t ***out, size_t *count)
+{
+    // Estimate the line count from how many delimeters are found.
+    // This doesn't account for CRLFs found in bulk strings, so can
+    // over estimate. The line index is used as the final count.
+    size_t line_count = 0;
+    for (size_t i = 0; i < length; i++)
+    {
+        if (data[i] == '\r' && i + 1 < length && data[i + 1] == '\n')
+        {
+            line_count++;
+            i++;
+        }
+    }
+
+    // Assume if we haven't found the line count yet, the data is incomplete.
+    if (line_count < 1)
+    {
+        return INCOMPLETE;
+    }
+
+    line_t **lines = calloc(line_count, sizeof(line_t *));
+    if (!lines)
+    {
+        return ERROR;
+    }
+
+    size_t line_index = 0;
+    size_t start_index = 0;
+    bool extract_bulk_length = false;
+    for (size_t i = 0; i < length; i++)
+    {
+        if (line_index >= line_count || (extract_bulk_length && line_index + 1 == line_count))
+        {
+            free_lines(lines, line_index);
+            return ERROR;
+        }
+
+        if (data[i] == '$')
+        {
+            extract_bulk_length = true;
+            continue;
+        }
+
+        if (data[i] != '\r' || i + 1 >= length || data[i + 1] != '\n')
+        {
+            continue;
+        }
+
+        line_t *line = calloc(1, sizeof(line_t));
+        if (!line)
+        {
+            free_lines(lines, line_index);
+            return ERROR;
+        }
+
+        line->data = data + start_index;
+        line->len = i - start_index;
+        start_index = i + 2;
+        i = start_index;
+        lines[line_index++] = line;
+
+        if (extract_bulk_length)
+        {
+            line_t *payload = calloc(1, sizeof(line_t));
+            if (!payload)
+            {
+                free_lines(lines, line_index);
+                return ERROR;
+            }
+            lines[line_index++] = payload;
+
+            long long bulk_length;
+            if (parse_int(line->data + 1, line->len - 1, &bulk_length) != 0)
+            {
+                free_lines(lines, line_index);
+                return ERROR;
+            }
+
+            if (bulk_length < 0)
+            {
+                free_lines(lines, line_index);
+                return ERROR;
+            }
+
+            if (bulk_length + 1 > (long long)length)
+            {
+                free_lines(lines, line_index);
+                return INCOMPLETE;
+            }
+
+            const char *bulk_data = data + start_index;
+            if (bulk_data[bulk_length] != '\r' || bulk_data[bulk_length + 1] != '\n')
+            {
+                free_lines(lines, line_index);
+                return ERROR;
+            }
+
+            payload->data = bulk_data;
+            payload->len = bulk_length;
+            start_index = bulk_length + 2;
+            i += bulk_length + 2;
+            extract_bulk_length = false;
+        }
+    }
+
+    *out = lines;
+    *count = line_index;
+
+    return OK;
+}
+
+RespParseResult parse_lines(RespNode_t **out, line_t **lines, size_t len, size_t *lines_read)
+{
+    if (!lines || len < 1 || lines[0]->len < 1)
+    {
+        return ERROR;
+    }
+
+    RespNode_t *node = calloc(1, sizeof(RespNode_t));
     if (!node)
     {
-        return -1;
-    }
-    node->type = SIMPLE_STRING;
-    node->value = NULL;
-
-    if (read_node_type(buf, &node->type) != 0)
-    {
-        free(node);
-        return -1;
+        return ERROR;
     }
 
-    switch (node->type)
+    switch (lines[0]->data[0])
     {
-    case SIMPLE_STRING:
+    case SIMPLE_STRING_KEY:
     {
-        char *value;
-        if (read_simple_string(buf, &value) != 0)
-        {
-            free(node);
-            return -1;
-        }
-        node->value = (void *)value;
-        node->length = strlen(value);
+        node->type = SIMPLE_STRING;
+        node->value = strndup(lines[0]->data + 1, lines[0]->len - 1);
+        node->length = lines[0]->len - 1;
+        *lines_read = 1;
         break;
     }
-    case BULK_STRING:
+    case INTEGER_KEY:
     {
-        ssize_t length = 0;
-        if (read_integer(buf, &length) != 0)
+        long long *value = malloc(sizeof(long long));
+        if (!value || parse_int(lines[0]->data + 1, lines[0]->len - 1, value) != 0)
         {
-            free(node);
-            return -1;
+            resp_node_free(node);
+            return ERROR;
         }
-        char *value;
-        if (read_string(buf, &value, (int)length) != 0)
-        {
-            free(node);
-            return -1;
-        }
-        node->length = (size_t)length;
-        node->value = (void *)value;
+
+        node->type = INTEGER;
+        node->value = value;
+        node->length = 0;
+        *lines_read = 1;
         break;
     }
-    case INTEGER:
+    case BULK_STRING_KEY:
     {
-        ssize_t *value = malloc(sizeof(ssize_t));
-        if (!value)
+        if (len < 2)
         {
-            free(node);
-            return -1;
+            resp_node_free(node);
+            return INCOMPLETE;
         }
-        if (read_integer(buf, value) != 0)
-        {
-            free(value);
-            free(node);
-            return -1;
-        }
-        node->value = (void *)value;
+
+        node->type = BULK_STRING;
+        node->value = strndup(lines[1]->data, lines[1]->len);
+        node->length = lines[1]->len;
+        *lines_read = 2;
         break;
     }
-    case ARRAY:
+    case ARRAY_KEY:
     {
-        ssize_t length = 0;
-        if (read_integer(buf, &length) != 0 || length < 0)
+        long long array_length;
+        if (parse_int(lines[0]->data + 1, lines[0]->len - 1, &array_length) != 0)
         {
-            free(node);
-            return -1;
+            resp_node_free(node);
+            return ERROR;
         }
-        node->length = (size_t)length;
-        RespNode_t **nodes = malloc(sizeof(RespNode_t *) * length);
+
+        node->type = ARRAY;
+        node->length = array_length;
+
+        if (array_length < -1)
+        {
+            resp_node_free(node);
+            printf("parse_lines: array length less than -1\n");
+            return ERROR;
+        }
+
+        // -1 indicates NULL array, so break early here
+        if (array_length == -1)
+        {
+            node->value = NULL;
+            break;
+        }
+
+        if (array_length > (long long)len - 1)
+        {
+            resp_node_free(node);
+            printf("parse_lines: array length longer than available lines\n");
+            return ERROR;
+        }
+
+        RespNode_t **nodes = calloc(array_length, sizeof(RespNode_t *));
         if (!nodes)
         {
-            free(node);
-            return -1;
+            resp_node_free(node);
+            return ERROR;
         }
-        for (ssize_t i = 0; i < length; i++)
+        node->value = nodes;
+
+        size_t sub_lines_read = 0;
+        for (long long i = 0; i < array_length; i++)
         {
-            if (resp_parse(&nodes[i], buf) != 0)
+            RespNode_t *sub_node;
+            size_t offset = 1 + sub_lines_read;
+            size_t lr = 0;
+            RespParseResult res = parse_lines(&sub_node, lines + offset, len - offset, &lr);
+            sub_lines_read += lr;
+            if (res != OK)
             {
-                for (ssize_t j = 0; j < i; j++)
-                {
-                    resp_node_free(nodes[j]);
-                }
-                free(nodes);
-                free(node);
-                return -1;
+                resp_node_free(node);
+                return res;
             }
+
+            nodes[i] = sub_node;
         }
-        node->value = (void *)nodes;
+
+        *lines_read = 1 + sub_lines_read;
+
         break;
     }
     default:
     {
-        printf("ERROR: unable to parse unsupported resp data type\n");
-        free(node);
-        return -1;
+        resp_node_free(node);
+        printf("parse_lines: unsupported input: %.*s\n", (int)lines[0]->len, lines[0]->data);
+        return ERROR;
     }
     }
 
-    *target = node;
-    return 0;
+    *out = node;
+    return OK;
 }
 
-int try_resp_parse(RespNode_t **target, buffer_t *buf)
+RespParseResult resp_parse(RespNode_t **target, buffer_t *buf)
 {
-    int ec;
-    while ((ec = resp_parse(target, buf)) != 0)
+    line_t **lines = NULL;
+    size_t line_count = 0;
+    RespParseResult res = INCOMPLETE;
+    size_t total_bytes = 0;
+
+    do
     {
-        buf_seek(buf, 0);
+        ssize_t bytes_read = buf_read(buf, NULL, total_bytes + BUFFER_BLOCK_SIZE);
+        if (bytes_read <= 0)
+        {
+            return ERROR;
+        }
+        total_bytes += bytes_read;
+
+        if ((res = split_lines(buf_data(buf), total_bytes, &lines, &line_count)) == ERROR)
+        {
+            return res;
+        }
+    } while (total_bytes < MAX_READ_SIZE && res == INCOMPLETE);
+
+    size_t lines_read = 0;
+    res = parse_lines(target, lines, line_count, &lines_read);
+    free_lines(lines, line_count);
+
+    if (lines_read != line_count)
+    {
+        res = INCOMPLETE;
     }
-    return ec;
+
+    return res;
 }
 
 const char *resp_node_type_name(RespNodeType type)

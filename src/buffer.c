@@ -68,7 +68,7 @@ static int buf_ensure_space(buffer_t *buf, size_t extra)
 
 ssize_t buf_read(buffer_t *buf, char *out, size_t n)
 {
-    if (!buf || !out)
+    if (!buf)
     {
         return -1;
     }
@@ -101,7 +101,12 @@ ssize_t buf_read(buffer_t *buf, char *out, size_t n)
 
     size_t available = buf->len - buf->pos;
     size_t count = n < available ? n : available;
-    memcpy(out, buf->data + buf->pos, count);
+
+    if (out)
+    {
+        memcpy(out, buf->data + buf->pos, count);
+    }
+
     buf->pos += count;
     return (ssize_t)count;
 }
@@ -125,6 +130,15 @@ int buf_seek(buffer_t *buf, size_t pos)
 
     buf->pos = pos;
     return 0;
+}
+
+char *buf_data(buffer_t *buf)
+{
+    if (!buf)
+    {
+        return NULL;
+    }
+    return buf->data;
 }
 
 void buf_free(buffer_t *buf)
