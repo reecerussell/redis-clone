@@ -83,7 +83,7 @@ static int parse_node_type(const char c, RespNodeType *out)
 
 RespParseResult try_parse(const char *data, size_t length, int depth, RespNode_t **out, size_t *bytes_consumed)
 {
-    if (!data || !out || !bytes_consumed || depth > MAX_DEPTH || length > MAX_READ_SIZE)
+    if (!data || !out || !bytes_consumed || depth < 0 || depth > MAX_DEPTH || length > MAX_READ_SIZE)
     {
         return ERROR;
     }
@@ -202,7 +202,7 @@ RespParseResult try_parse(const char *data, size_t length, int depth, RespNode_t
                 return ERROR;
             }
 
-            if (array_length < -1 || array_length > MAX_ARRAY_LENGTH)
+            if (array_length < -1 || array_length > MAX_ARRAY_LENGTH || depth >= MAX_DEPTH)
             {
                 resp_node_free(node);
                 return ERROR;

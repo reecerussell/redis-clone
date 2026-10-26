@@ -159,9 +159,14 @@ static void test_depth(void)
     CHECK_RESULT("*1\r\n*1\r\n:1\r\n", ERROR); // nested element at depth 2
     CHECK_RESULT("*1\r\n*1\r\n*1\r\n:1\r\n", ERROR);
 
+    // A nested array is over the limit even with no elements to parse.
+    CHECK_RESULT("*1\r\n*0\r\n", ERROR);
+    CHECK_RESULT("*1\r\n*-1\r\n", ERROR);
+
     RespNode_t *node = NULL;
     size_t consumed = 0;
     CHECK(try_parse(":1\r\n", 4, 2, &node, &consumed) == ERROR);
+    CHECK(try_parse(":1\r\n", 4, -1, &node, &consumed) == ERROR);
     CHECK(node == NULL);
 }
 
