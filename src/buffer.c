@@ -83,17 +83,17 @@ ssize_t buf_read(buffer_t *buf, char *out, size_t n)
         return -1;
     }
 
-    while (buf->len - buf->pos < n)
+    if (buf->len - buf->pos < n)
     {
         ssize_t bytes_read;
         do
         {
             bytes_read = read(buf->fd, buf->data + buf->len, n);
-        } while (bytes_read < 0 && errno == EINTR);
+        } while (bytes_read < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
 
-        if (bytes_read <= 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+        if (bytes_read <= 0)
         {
-            break;
+            return bytes_read;
         }
 
         buf->len += (size_t)bytes_read;

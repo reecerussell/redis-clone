@@ -18,9 +18,9 @@ test-hash-table:
 	rm ./test_hash_table ./test_hash_table_asan
 
 test-resp:
-	gcc $(CFLAGS) -o test_resp test/test_resp.c src/resp.c src/buffer.c
+	gcc $(CFLAGS) -o test_resp test/test_resp.c src/resp.c
 	./test_resp
-	gcc $(CFLAGS) $(SAN) -o test_resp_asan test/test_resp.c src/resp.c src/buffer.c
+	gcc $(CFLAGS) $(SAN) -o test_resp_asan test/test_resp.c src/resp.c
 	./test_resp_asan
 	rm ./test_resp ./test_resp_asan
 

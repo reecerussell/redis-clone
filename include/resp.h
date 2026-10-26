@@ -1,9 +1,6 @@
 #ifndef RESP_H
 #define RESP_H
 
-#include <stdlib.h>
-#include "buffer.h"
-
 typedef enum
 {
     ARRAY,
@@ -26,7 +23,7 @@ typedef enum
     INCOMPLETE
 } RespParseResult;
 
-RespParseResult resp_parse(RespNode_t **target, buffer_t *buf);
+RespParseResult try_parse(const char *data, size_t length, int depth, RespNode_t **out, size_t *bytes_consumed);
 
 void resp_node_free(RespNode_t *node);
 
