@@ -1,5 +1,5 @@
 #include "test.h"
-#include "../include/hash_table.h"
+#include "../src/hash_table.h"
 
 static void test_create(void)
 {

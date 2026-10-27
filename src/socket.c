@@ -6,9 +6,9 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <string.h>
-#include "../include/socket.h"
-#include "../include/buffer.h"
-#include "../include/logger.h"
+#include "socket.h"
+#include "buffer.h"
+#include "logger.h"
 
 Listener *listener_create(int port, MessageHandler handler)
 {

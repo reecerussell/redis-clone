@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "../include/buffer.h"
+#include "buffer.h"
 
 #define DEFAULT_BLOCK_SIZE 1024
 

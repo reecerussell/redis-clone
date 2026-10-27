@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../include/resp.h"
+#include "resp.h"
 
 #define DELIMETER "\r\n"
 

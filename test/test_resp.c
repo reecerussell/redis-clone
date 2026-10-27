@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "test.h"
-#include "../include/resp.h"
+#include "../src/resp.h"
 
 // Parses a whole message from the top level (depth 0).
 static RespParseResult parse(const char *input, RespNode_t **node, size_t *consumed)

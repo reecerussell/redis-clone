@@ -3,10 +3,10 @@
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>
-#include "../include/socket.h"
-#include "../include/buffer.h"
-#include "../include/logger.h"
-#include "../include/resp.h"
+#include "../src/socket.h"
+#include "../src/buffer.h"
+#include "../src/logger.h"
+#include "../src/resp.h"
 
 static Listener *lis;
 

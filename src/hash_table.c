@@ -1,7 +1,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../include/hash_table.h"
+#include "hash_table.h"
 
 // Fowler-Noll-Vo (FNV-1a)
 static unsigned long hash(const char *key, size_t table_size)
