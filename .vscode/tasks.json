@@ -11,7 +11,9 @@
         "-o",
         "${fileDirname}/${fileBasenameNoExtension}",
         "${fileDirname}/../src/buffer.c",
-        "${fileDirname}/../src/resp.c"
+        "${fileDirname}/../src/resp.c",
+        "${fileDirname}/../src/socket.c",
+        "${fileDirname}/../src/logger.c"
       ],
       "options": {
         "cwd": "${fileDirname}"
