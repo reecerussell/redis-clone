@@ -25,6 +25,8 @@ typedef enum
 
 RespParseResult try_parse(const char *data, size_t length, int depth, RespNode_t **out, size_t *bytes_consumed);
 
+char *resp_node_to_string(RespNode_t *node);
+
 void resp_node_free(RespNode_t *node);
 
 const char *resp_node_type_name(RespNodeType type);

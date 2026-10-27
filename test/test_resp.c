@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "test.h"
 #include "../src/resp.h"
@@ -227,6 +228,82 @@ static void test_errors(void)
     CHECK(try_parse("+OK\r\n", 5, 0, &node, NULL) == ERROR);
 }
 
+static void test_simple_string_node_to_string(void)
+{
+    printf("test_simple_string_node_to_string\n");
+
+    char *value = "hello";
+    RespNode_t node = {
+        .type = SIMPLE_STRING,
+        .length = 5,
+        .value = value};
+
+    char *result = resp_node_to_string(&node);
+    CHECK_STR(result, "+hello\r\n");
+    free(result);
+}
+
+static void test_bulk_string_node_to_string(void)
+{
+    printf("test_bulk_string_node_to_string\n");
+
+    char *value = "hello";
+    RespNode_t node = {
+        .type = BULK_STRING,
+        .length = 5,
+        .value = value};
+
+    char *result = resp_node_to_string(&node);
+    CHECK_STR(result, "$5\r\nhello\r\n");
+    free(result);
+}
+
+static void test_integer_node_to_string(void)
+{
+    printf("test_integer_node_to_string\n");
+
+    long long value = 1234;
+    RespNode_t node = {
+        .type = INTEGER,
+        .length = 0,
+        .value = &value};
+
+    // Positive integer
+    char *result = resp_node_to_string(&node);
+    CHECK_STR(result, ":1234\r\n");
+    free(result);
+
+    // Negative integer
+    value = -1234;
+    result = resp_node_to_string(&node);
+    CHECK_STR(result, ":-1234\r\n");
+    free(result);
+}
+
+static void test_array_node_to_string(void)
+{
+    printf("test_array_node_to_string\n");
+
+    char *value = "hello";
+    RespNode_t child = {
+        .type = BULK_STRING,
+        .length = 5,
+        .value = value};
+
+    RespNode_t *nodes[1];
+    nodes[0] = &child;
+
+    RespNode_t parent = {
+        .type = ARRAY,
+        .length = 1,
+        .value = nodes};
+
+    // Positive integer
+    char *result = resp_node_to_string(&parent);
+    CHECK_STR(result, "*1\r\n$5\r\nhello\r\n");
+    free(result);
+}
+
 int main(void)
 {
     test_simple_string();
@@ -238,6 +315,10 @@ int main(void)
     test_incomplete();
     test_pipelined();
     test_errors();
+    test_simple_string_node_to_string();
+    test_bulk_string_node_to_string();
+    test_integer_node_to_string();
+    test_array_node_to_string();
 
     return TEST_SUMMARY();
 }

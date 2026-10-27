@@ -81,6 +81,28 @@ static int parse_node_type(const char c, RespNodeType *out)
     return 0;
 }
 
+static int node_type_key(RespNodeType type, char *out)
+{
+    switch (type)
+    {
+    case SIMPLE_STRING:
+        *out = SIMPLE_STRING_KEY;
+        break;
+    case INTEGER:
+        *out = INTEGER_KEY;
+        break;
+    case BULK_STRING:
+        *out = BULK_STRING_KEY;
+        break;
+    case ARRAY:
+        *out = ARRAY_KEY;
+        break;
+    default:
+        return -1;
+    }
+    return 0;
+}
+
 RespParseResult try_parse(const char *data, size_t length, int depth, RespNode_t **out, size_t *bytes_consumed)
 {
     if (!data || !out || !bytes_consumed || depth < 0 || depth > MAX_DEPTH || length > MAX_READ_SIZE)
@@ -267,4 +289,131 @@ const char *resp_node_type_name(RespNodeType type)
     default:
         return "Unknown";
     }
+}
+
+static int length_of_integer(long long value)
+{
+    int n = 1;
+
+    if (value < 0)
+    {
+        n++;
+        value *= -1;
+    }
+
+    while (value >= 10)
+    {
+        n++;
+        value /= 10;
+    }
+
+    return n;
+}
+
+static long long calculate_node_string_length(RespNode_t *node)
+{
+    const long long delim_length = 2;
+    long long length = 1 + delim_length; // starting key + ending delim;
+
+    switch (node->type)
+    {
+    case SIMPLE_STRING:
+        return length + node->length;
+    case BULK_STRING:
+        return length + length_of_integer(node->length) + delim_length + node->length;
+    case INTEGER:
+        return length + length_of_integer(*((long long *)node->value));
+    case ARRAY:
+    {
+        length += length_of_integer(node->length) + delim_length;
+        RespNode_t **nodes = (RespNode_t **)node->value;
+        for (long long i = 0; i < node->length; i++)
+        {
+            length += calculate_node_string_length(nodes[i]);
+        }
+        return length;
+    }
+    default:
+        return -1;
+    }
+}
+
+static int write_node_to_string(RespNode_t *node, char *result, long long *written)
+{
+    if (node_type_key(node->type, result) != 0)
+    {
+        return -1;
+    }
+
+    long long n = 1;
+    switch (node->type)
+    {
+    case SIMPLE_STRING:
+        memcpy(result + n, (char *)node->value, node->length);
+        n += node->length;
+        result[n++] = '\r';
+        result[n++] = '\n';
+        break;
+    case BULK_STRING:
+        n += sprintf(result + n, "%lld", node->length);
+        result[n++] = '\r';
+        result[n++] = '\n';
+        memcpy(result + n, (char *)node->value, node->length);
+        n += node->length;
+        result[n++] = '\r';
+        result[n++] = '\n';
+        break;
+    case INTEGER:
+        n += sprintf(result + n, "%lld", *((long long *)node->value));
+        result[n++] = '\r';
+        result[n++] = '\n';
+        break;
+    case ARRAY:
+    {
+        n += sprintf(result + n, "%lld", node->length);
+        result[n++] = '\r';
+        result[n++] = '\n';
+        RespNode_t **nodes = (RespNode_t **)node->value;
+        for (long long i = 0; i < node->length; i++)
+        {
+            long long sub_written;
+            if (write_node_to_string(nodes[i], result + n, &sub_written) != 0)
+            {
+                return -1;
+            }
+            n += sub_written;
+        }
+        break;
+    }
+    default:
+        return -1;
+    }
+
+    *written = n;
+    return 0;
+}
+
+char *resp_node_to_string(RespNode_t *node)
+{
+    if (!node)
+    {
+        return NULL;
+    }
+
+    const long long length = calculate_node_string_length(node) + 1;
+    char *result = malloc(sizeof(char) * length);
+    if (!result)
+    {
+        return NULL;
+    }
+
+    long long written;
+    if (write_node_to_string(node, result, &written) != 0)
+    {
+        free(result);
+        return NULL;
+    }
+
+    result[written] = '\0';
+    return result;
 }

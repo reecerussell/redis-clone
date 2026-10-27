@@ -7,7 +7,7 @@
 static int checks = 0;
 static int failures = 0;
 
-#define CHECK(cond)                                                   \
+#define CHECK(cond, ...)                                              \
     do                                                                \
     {                                                                 \
         checks++;                                                     \
@@ -35,7 +35,12 @@ static int failures = 0;
     do                                                  \
     {                                                   \
         const char *a_ = (actual);                      \
+        int failures_before_ = failures;                \
         CHECK(a_ != NULL && strcmp(a_, expected) == 0); \
+        if (failures != failures_before_)               \
+        {                                               \
+            printf("    ACTUAL: %s\n", a_);             \
+        }                                               \
     } while (0)
 
 #define FAILF(...)           \
