@@ -3,7 +3,7 @@
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>
-#include "../src/socket.h"
+#include "../src/listener.h"
 #include "../src/buffer.h"
 #include "../src/logger.h"
 #include "../src/resp.h"
@@ -63,45 +63,23 @@ int print_node(RespNode_t *node)
     return 0;
 }
 
-int handler(buffer_t *buf, char **result)
+void handler(RespNode_t *node, RespNode_t **reply)
 {
     log_infoc("test.handler", "Received request!");
 
-    RespParseResult res = ERROR;
+    print_node(node);
 
-    size_t total_bytes = 0;
-    size_t total_bytes_consumed = 0;
-    do
+    RespNode_t *reply_node = malloc(sizeof(RespNode_t));
+    if (!reply_node)
     {
-        if (total_bytes_consumed >= total_bytes || res == INCOMPLETE)
-        {
-            ssize_t bytes_read = buf_read(buf, NULL, 1024);
-            if (bytes_read <= 0)
-            {
-                break;
-            }
-            total_bytes += bytes_read;
-        }
-
-        RespNode_t *node;
-        size_t bytes_consumed;
-        res = try_parse(buf_data(buf) + total_bytes_consumed, total_bytes - total_bytes_consumed, 0, &node, &bytes_consumed);
-        if (res == OK)
-        {
-            print_node(node);
-            resp_node_free(node);
-            total_bytes_consumed += bytes_consumed;
-        }
-    } while (res != ERROR);
-
-    if (res == ERROR)
-    {
-        log_errorc("test.handler", "Failed to parse arguments");
+        log_errorc("test.handler", "Failed to allocate reply node");
+        return;
     }
 
-    *result = strdup("Bye bye");
-
-    return 8;
+    reply_node->type = SIMPLE_STRING;
+    reply_node->length = 2;
+    reply_node->value = strdup("OK");
+    *reply = reply_node;
 }
 
 int main(void)

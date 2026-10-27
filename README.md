@@ -12,3 +12,4 @@ In a world where coding agents are what you turn to for "hello world", my goal o
 - [ ] Handle multiple connections
 - [ ] Handle Entry expirations
 - [ ] Automatically resize the hash table when too big
+- [ ] Automatically compact the buffer when nodes are read

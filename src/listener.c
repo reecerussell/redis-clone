@@ -6,7 +6,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <string.h>
-#include "socket.h"
+#include "listener.h"
 #include "buffer.h"
 #include "logger.h"
 
@@ -38,6 +38,73 @@ Listener *listener_create(int port, MessageHandler handler)
     lis->handler = handler;
     atomic_init(&lis->is_stopping, false);
     return lis;
+}
+
+static void handle_connection(Listener *lis, int fd)
+{
+    if (!lis || fd < 0)
+    {
+        return;
+    }
+
+    buffer_t *buf = buf_create(fd);
+    if (!buf)
+    {
+        return;
+    }
+
+    RespParseResult res = ERROR;
+    size_t total_bytes = 0;
+    size_t total_bytes_consumed = 0;
+    do
+    {
+        if (total_bytes_consumed >= total_bytes || res == INCOMPLETE)
+        {
+            ssize_t bytes_read = buf_read(buf, NULL, 1024);
+            if (bytes_read <= 0)
+            {
+                break;
+            }
+            total_bytes += bytes_read;
+        }
+
+        RespNode_t *node;
+        size_t bytes_consumed;
+        res = try_parse(buf_data(buf) + total_bytes_consumed, total_bytes - total_bytes_consumed, 0, &node, &bytes_consumed);
+        if (res != OK)
+        {
+            continue;
+        }
+
+        RespNode_t *reply = NULL;
+        lis->handler(node, &reply);
+        resp_node_free(node);
+        total_bytes_consumed += bytes_consumed;
+
+        if (reply)
+        {
+            char *reply_string = resp_node_to_string(reply);
+            if (reply_string)
+            {
+                size_t reply_len = strlen(reply_string);
+                size_t sent = 0;
+                while (sent < reply_len)
+                {
+                    ssize_t bytes_sent = send(fd, reply_string + sent, reply_len - sent, MSG_NOSIGNAL);
+                    if (bytes_sent <= 0)
+                    {
+                        break;
+                    }
+                    sent += bytes_sent;
+                }
+
+                free(reply_string);
+            }
+            resp_node_free(reply);
+        }
+    } while (res != ERROR);
+
+    buf_free(buf);
 }
 
 int listener_start(Listener *lis)
@@ -77,25 +144,7 @@ int listener_start(Listener *lis)
 
         log_infoc("listener", "Accepted new connection from '%s'", (char *)lis->addr);
 
-        buffer_t *buf = buf_create(clifd);
-        if (!buf)
-        {
-            close(clifd);
-            continue;
-        }
-
-        char *resp;
-        int resp_len = lis->handler(buf, &resp);
-
-        // If no error or there is data, try to send the response. In future
-        // I need to add logging here so we know what happens.
-        if (resp_len > 0)
-        {
-            send(clifd, resp, resp_len, MSG_NOSIGNAL);
-            free(resp);
-        }
-
-        buf_free(buf);
+        handle_connection(lis, clifd);
         close(clifd);
     }
 

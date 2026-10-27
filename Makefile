@@ -25,7 +25,7 @@ test-resp:
 	rm ./test_resp ./test_resp_asan
 
 test-listener:
-	gcc $(CFLAGS) -o test_listener test/test_manual_listener.c src/socket.c src/logger.c src/buffer.c src/resp.c
+	gcc $(CFLAGS) -o test_listener test/test_manual_listener.c src/listener.c src/logger.c src/buffer.c src/resp.c
 
 
 .PHONY: default test test-hash-table test-resp test-listener

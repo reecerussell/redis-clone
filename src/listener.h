@@ -1,8 +1,8 @@
 #include <netinet/in.h>
 #include <stdatomic.h>
-#include "buffer.h"
+#include "resp.h"
 
-typedef int (*MessageHandler)(buffer_t *buf, char **resp);
+typedef void (*MessageHandler)(RespNode_t *node, RespNode_t **reply);
 
 typedef struct
 {
