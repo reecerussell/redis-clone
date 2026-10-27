@@ -40,6 +40,35 @@ Listener *listener_create(int port, MessageHandler handler)
     return lis;
 }
 
+static void process_reply(int fd, RespNode_t *reply)
+{
+    if (fd < 0 || !reply)
+    {
+        return;
+    }
+
+    char *reply_string = resp_node_to_string(reply);
+    if (!reply_string)
+    {
+        resp_node_free(reply);
+    }
+
+    size_t reply_len = strlen(reply_string);
+    size_t sent = 0;
+    while (sent < reply_len)
+    {
+        ssize_t bytes_sent = send(fd, reply_string + sent, reply_len - sent, MSG_NOSIGNAL);
+        if (bytes_sent <= 0)
+        {
+            break;
+        }
+        sent += bytes_sent;
+    }
+
+    free(reply_string);
+    resp_node_free(reply);
+}
+
 static void handle_connection(Listener *lis, int fd)
 {
     if (!lis || fd < 0)
@@ -80,28 +109,7 @@ static void handle_connection(Listener *lis, int fd)
         lis->handler(node, &reply);
         resp_node_free(node);
         total_bytes_consumed += bytes_consumed;
-
-        if (reply)
-        {
-            char *reply_string = resp_node_to_string(reply);
-            if (reply_string)
-            {
-                size_t reply_len = strlen(reply_string);
-                size_t sent = 0;
-                while (sent < reply_len)
-                {
-                    ssize_t bytes_sent = send(fd, reply_string + sent, reply_len - sent, MSG_NOSIGNAL);
-                    if (bytes_sent <= 0)
-                    {
-                        break;
-                    }
-                    sent += bytes_sent;
-                }
-
-                free(reply_string);
-            }
-            resp_node_free(reply);
-        }
+        process_reply(fd, reply);
     } while (res != ERROR);
 
     buf_free(buf);
