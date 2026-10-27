@@ -351,8 +351,6 @@ static int write_node_to_string(RespNode_t *node, char *result, long long *writt
     case SIMPLE_STRING:
         memcpy(result + n, (char *)node->value, node->length);
         n += node->length;
-        result[n++] = '\r';
-        result[n++] = '\n';
         break;
     case BULK_STRING:
         n += sprintf(result + n, "%lld", node->length);
@@ -360,13 +358,9 @@ static int write_node_to_string(RespNode_t *node, char *result, long long *writt
         result[n++] = '\n';
         memcpy(result + n, (char *)node->value, node->length);
         n += node->length;
-        result[n++] = '\r';
-        result[n++] = '\n';
         break;
     case INTEGER:
         n += sprintf(result + n, "%lld", *((long long *)node->value));
-        result[n++] = '\r';
-        result[n++] = '\n';
         break;
     case ARRAY:
     {
@@ -387,6 +381,12 @@ static int write_node_to_string(RespNode_t *node, char *result, long long *writt
     }
     default:
         return -1;
+    }
+
+    if (node->type != ARRAY)
+    {
+        result[n++] = '\r';
+        result[n++] = '\n';
     }
 
     *written = n;
