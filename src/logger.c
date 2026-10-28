@@ -2,7 +2,7 @@
 #include <stdarg.h>
 
 // error = 0, info = 1, debug = 2;
-static int max_level = 1;
+static int max_level = 2;
 
 void log_info(const char *format, ...)
 {

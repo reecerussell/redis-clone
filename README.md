@@ -8,8 +8,10 @@ In a world where coding agents are what you turn to for "hello world", my goal o
 
 - [x] Make a hash table data structure
 - [x] Be able to parse some basic REdis Serialisation Protocol
-- [ ] Handle a single TCP connection to GET/SET/DEL
+- [x] Handle a single TCP connection to GET/SET/DEL
 - [ ] Handle multiple connections
 - [ ] Handle Entry expirations
 - [ ] Automatically resize the hash table when too big
 - [ ] Automatically compact the buffer when nodes are read
+- [ ] Handle read and idle timeouts on connections
+- [ ] Kick connections off when gracefully shutting down

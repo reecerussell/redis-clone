@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include "resp.h"
 
 #define DELIMETER "\r\n"
@@ -75,6 +76,9 @@ static int parse_node_type(const char c, RespNodeType *out)
     case ARRAY_KEY:
         *out = ARRAY;
         break;
+    case ERROR_KEY:
+        *out = RESP_ERROR;
+        break;
     default:
         return -1;
     }
@@ -96,6 +100,9 @@ static int node_type_key(RespNodeType type, char *out)
         break;
     case ARRAY:
         *out = ARRAY_KEY;
+        break;
+    case RESP_ERROR:
+        *out = ERROR_KEY;
         break;
     default:
         return -1;
@@ -145,7 +152,7 @@ RespParseResult try_parse(const char *data, size_t length, int depth, RespNode_t
 
         node->type = type;
 
-        if (type == SIMPLE_STRING)
+        if (type == SIMPLE_STRING || type == RESP_ERROR)
         {
             node->length = current_line_length;
             node->value = strndup(current_line, current_line_length);
@@ -318,6 +325,7 @@ static long long calculate_node_string_length(RespNode_t *node)
     switch (node->type)
     {
     case SIMPLE_STRING:
+    case RESP_ERROR:
         return length + node->length;
     case BULK_STRING:
         return length + length_of_integer(node->length) + delim_length + node->length;
@@ -349,6 +357,7 @@ static int write_node_to_string(RespNode_t *node, char *result, long long *writt
     switch (node->type)
     {
     case SIMPLE_STRING:
+    case RESP_ERROR:
         memcpy(result + n, (char *)node->value, node->length);
         n += node->length;
         break;
@@ -416,4 +425,99 @@ char *resp_node_to_string(RespNode_t *node)
 
     result[written] = '\0';
     return result;
+}
+
+// Helpers
+
+RespNode_t *resp_child_node_at(RespNode_t *node, size_t index)
+{
+    if (!node || node->type != ARRAY || (long long)index >= node->length)
+    {
+        return NULL;
+    }
+
+    RespNode_t **nodes = (RespNode_t **)node->value;
+    return nodes[index];
+}
+
+RespNode_t *resp_create_string(char *value)
+{
+    RespNode_t *node = malloc(sizeof(RespNode_t));
+    if (!node)
+    {
+        return NULL;
+    }
+    node->type = BULK_STRING;
+    node->length = strlen(value);
+    node->value = strdup(value);
+    return node;
+}
+
+RespNode_t *resp_create_error(char *value)
+{
+    RespNode_t *node = malloc(sizeof(RespNode_t));
+    if (!node)
+    {
+        return NULL;
+    }
+    node->type = RESP_ERROR;
+    node->length = strlen(value);
+    node->value = strdup(value);
+    return node;
+}
+
+RespNode_t *resp_create_integer(long long value)
+{
+    RespNode_t *node = malloc(sizeof(RespNode_t));
+    if (!node)
+    {
+        return NULL;
+    }
+    long long *forward_value = malloc(sizeof(long long));
+    if (!forward_value)
+    {
+        free(node);
+        return NULL;
+    }
+    *forward_value = value;
+    node->type = INTEGER;
+    node->length = 0;
+    node->value = forward_value;
+    return node;
+}
+
+RespNode_t *resp_create_array(size_t len, ...)
+{
+    RespNode_t **nodes = calloc(len, sizeof(RespNode_t *));
+    if (!nodes)
+    {
+        return NULL;
+    }
+
+    va_list args;
+    va_start(args, len);
+
+    for (size_t i = 0; i < len; i++)
+    {
+        RespNode_t *node = (RespNode_t *)va_arg(args, RespNode_t *);
+        if (!node)
+        {
+            free(nodes);
+            return NULL;
+        }
+        nodes[i] = node;
+    }
+
+    va_end(args);
+
+    RespNode_t *node = malloc(sizeof(RespNode_t));
+    if (!node)
+    {
+        free(nodes);
+        return NULL;
+    }
+    node->type = ARRAY;
+    node->length = (long long)len;
+    node->value = nodes;
+    return node;
 }

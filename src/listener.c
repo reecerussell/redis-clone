@@ -4,13 +4,15 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 #include <string.h>
 #include "listener.h"
 #include "buffer.h"
 #include "logger.h"
+#include "utils.h"
 
-Listener *listener_create(int port, MessageHandler handler)
+Listener *listener_create(int port, MessageHandler handler, DisconnectHandler on_disconnect)
 {
     if (port < 1 || port > 65535 || !handler)
     {
@@ -36,6 +38,7 @@ Listener *listener_create(int port, MessageHandler handler)
 
     lis->addr = sock_addr;
     lis->handler = handler;
+    lis->on_disconnect = on_disconnect;
     atomic_init(&lis->is_stopping, false);
     return lis;
 }
@@ -82,11 +85,19 @@ static void handle_connection(Listener *lis, int fd)
         return;
     }
 
+    char *client_id = generate_uuid();
+
     RespParseResult res = ERROR;
     size_t total_bytes = 0;
     size_t total_bytes_consumed = 0;
+    stopwatch_t *stopwatch = NULL;
     do
     {
+        if (!stopwatch)
+        {
+            stopwatch = stopwatch_start();
+        }
+
         if (total_bytes_consumed >= total_bytes || res == INCOMPLETE)
         {
             ssize_t bytes_read = buf_read(buf, NULL, 1024);
@@ -106,13 +117,27 @@ static void handle_connection(Listener *lis, int fd)
         }
 
         RespNode_t *reply = NULL;
-        lis->handler(node, &reply);
+        lis->handler(client_id, node, &reply);
         resp_node_free(node);
         total_bytes_consumed += bytes_consumed;
         process_reply(fd, reply);
+
+        log_infoc("listener", "Read and processed request in %lldus", stopwatch_stop_us(stopwatch));
+        stopwatch = NULL;
     } while (res != ERROR);
 
+    if (lis->on_disconnect)
+    {
+        lis->on_disconnect(client_id);
+    }
+
+    if (stopwatch)
+    {
+        stopwatch_stop_us(stopwatch);
+    }
+
     buf_free(buf);
+    free(client_id);
 }
 
 int listener_start(Listener *lis)
@@ -149,6 +174,7 @@ int listener_start(Listener *lis)
         {
             continue;
         }
+        setsockopt(clifd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
 
         log_infoc("listener", "Accepted new connection from '%s'", (char *)lis->addr);
 
